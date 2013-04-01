@@ -6,37 +6,34 @@ import re
 import json
 import urllib
 import os
+from common import create_context
 
 
-ROOT_URL = "http://www.uvo.gov.sk/evestnik/-/vestnik"
-BULLETIN_CATALOG = "bulletins.json"
-DATA_DIR = "data"
-
-
-def get_scraped_bulletins():
+def get_scraped_bulletins(ctx):
     """Get list of already scraped bulletins from bulletin catalog file"""
 
     original_bulletins = []
-    if os.path.exists(BULLETIN_CATALOG):
-        with open(BULLETIN_CATALOG, "r") as bulletin_file:
+    if os.path.exists(ctx.bulletin_catalog):
+        with open(ctx.bulletin_catalog, "r") as bulletin_file:
             original_bulletins = json.load(bulletin_file)
 
     return original_bulletins  
 
 
-def get_new_bulletins():
+def get_new_bulletins(ctx):
     """Scrape new bulletins"""
 
     # get list of all already scraped bulletins
-    scraped_bulletins = get_scraped_bulletins()
+    scraped_bulletins = get_scraped_bulletins(ctx)
     
     # create connection
-    responce = requests.get(ROOT_URL + "/all")
+    responce = ctx.session.get(ctx.root_url + "/all")
     soup = BeautifulSoup(responce.text)
     
     # scrape all bulletin issues and links
     bulletins = []
     bulletins_in_years = soup.findAll("table", id=re.compile("rok_[0-9]+"))
+
     for bulletins_in_year in bulletins_in_years:
         bulletins_per_year = bulletins_in_year.findAll("a")
         for bulletin in bulletins_per_year:
@@ -48,51 +45,57 @@ def get_new_bulletins():
             # bulletin has not been scraped before, add it to unscraped list
             if bulletin["issue"] not in scraped_bulletins:
                 bulletins.append(bulletin)
+
+    ctx.logger.debug("Number of unscraped bulletins: %d" % (len(bulletins)))                
     return bulletins
 
 
-def download_xml(url):
+def download_xml(ctx, url):
     """Download xml file from announcement url. The url contains a numeric 
     name of the xml file, no need to search the url content."""
 
-    # get file name from
-    filename = "%s.xml" % (re.search("/([0-9]+);", url).group(1))
-    url = ROOT_URL + "/save/" + filename
+    # get file name from url
+    filename = "%s.xml" % (re.search("/([0-9]+)", url).group(1))
 
-    # check if data directory exists, if not raise exception
-    if not os.path.exists(DATA_DIR):
-        raise Exception("Data directory does not exist")
-
-    destination = os.path.join(DATA_DIR, filename)
+    # retrieve file
+    url = ctx.root_url + "/save/" + filename
+    destination = os.path.join(ctx.workspace_path, filename)    
     urllib.urlretrieve(url, destination)
 
 
-def scrape_bulletin(bulletin):
+def scrape_bulletin(ctx, bulletin):
     """Scrape announcements from bulletin url as xml file. 
     Store bulletin issue into bulletin catalog file."""
 
     # create connection
-    response = requests.get(bulletin["url"])
+    response = ctx.session.get(bulletin["url"])
     soup = BeautifulSoup(response.text)
     
     # find all announcement links and download its content in xml
     announcements = soup.findAll("div", attrs={"class": "portlet-body"})[-1]
     announcements = announcements.findAll("a", text=re.compile("[0-9]+"))
+
+    ctx.logger.debug("Scraping bulletin issue '%s' with %d announcements..." % 
+                        (bulletin["issue"], len(announcements)))
+
     for announcement in announcements:
-        download_xml(announcement["href"])
+        download_xml(ctx, announcement["href"])
+
         
     # get list of already scraped bulletins and add newly scraped one
-    bulletins = get_scraped_bulletins()
+    bulletins = get_scraped_bulletins(ctx)
     bulletins.append(bulletin["issue"])
     
     # store all scraped bulletins
-    with open(BULLETIN_CATALOG, "w") as bulletin_file:
+    with open(ctx.bulletin_catalog, "w") as bulletin_file:
         json.dump(bulletins, bulletin_file, indent=4)
 
 
 if __name__ == "__main__":
+    # create context
+    ctx = create_context("config.ini")
 
     # scrape new bulletins
-    bulletins = get_new_bulletins()
+    bulletins = get_new_bulletins(ctx)
     for bulletin in bulletins:
-        scrape_bulletin(bulletin)
+        scrape_bulletin(ctx, bulletin)
