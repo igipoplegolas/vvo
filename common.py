@@ -14,27 +14,30 @@ _etl_defaults = {
 }
 
 
-class ExtendedLogger(logging.Logger):
-    """Extended logger"""
-    def __init__(self, filename=None, level=None):
+def configure_logger(filename=None, level=None):
+    """Configure logger"""
+    levels = {  
+        "info": logging.INFO,
+        "debug": logging.DEBUG,
+        "warn":logging.WARN,
+        "error": logging.ERROR
+    }
 
-        levels = {  "info": logging.INFO,
-                    "debug": logging.DEBUG,
-                    "warn":logging.WARN,
-                    "error": logging.ERROR}
+    if level:
+        level = level.lower()
 
-        if level:
-            level = level.lower()
+    logger = logging.getLogger("elt")
+    logger.setLevel(levels.get(level, logging.DEBUG))
 
-        logging.Logger.__init__(self, "vvo", levels.get(level, logging.DEBUG))
-
-        formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        if filename and filename != '-':
-            handler = logging.FileHandler(filename)
-        else:
-            handler = logging.StreamHandler()
-        handler.setFormatter(formatter)
-        self.addHandler(handler)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    if filename and filename != '-':
+        handler = logging.FileHandler(filename)
+    else:
+        handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    return logger
 
 
 class Context(dict):
@@ -63,7 +66,7 @@ def create_context(config_filename):
         raise Exception("Unable to load configuration: %s" % e)    
 
     # create logger
-    ctx.logger = ExtendedLogger(
+    ctx.logger = configure_logger(
                     config.get("etl", "log_file", vars=_etl_defaults),
                     config.get("etl", "log_level", vars=_etl_defaults))
 
