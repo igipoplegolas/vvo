@@ -12,12 +12,14 @@ from common import create_context
 def get_scraped_bulletins(ctx):
     """Get list of already scraped bulletins from bulletin catalog file"""
 
-    original_bulletins = []
+    bulletins = []
     if os.path.exists(ctx.bulletin_catalog):
         with open(ctx.bulletin_catalog, "r") as bulletin_file:
-            original_bulletins = json.load(bulletin_file)
+            bulletins = json.load(bulletin_file)
 
-    return original_bulletins  
+    ctx.logger.debug("Number of scraped bulletins: %d" % 
+                        (len(bulletins)))    
+    return bulletins  
 
 
 def get_new_bulletins(ctx):
@@ -27,8 +29,8 @@ def get_new_bulletins(ctx):
     scraped_bulletins = get_scraped_bulletins(ctx)
     
     # create connection
-    responce = ctx.session.get(ctx.root_url + "/all")
-    soup = BeautifulSoup(responce.text)
+    response = ctx.session.get(ctx.root_url + "/all")
+    soup = BeautifulSoup(response.text)
     
     # scrape all bulletin issues and links
     bulletins = []
@@ -56,11 +58,13 @@ def download_xml(ctx, url):
 
     # get file name from url
     filename = "%s.xml" % (re.search("/([0-9]+)", url).group(1))
+    destination = os.path.join(ctx.workspace_path, filename)
 
-    # retrieve file
-    url = ctx.root_url + "/save/" + filename
-    destination = os.path.join(ctx.workspace_path, filename)    
-    urllib.urlretrieve(url, destination)
+    # download file
+    response = ctx.session.get(ctx.root_url + "/save/" + filename)
+    with open(destination, "wb") as xml_file:
+        xml_file.write(response.content)  
+
 
 
 def scrape_bulletin(ctx, bulletin):

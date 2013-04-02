@@ -81,6 +81,10 @@ def create_context(config_filename):
         ctx.logger.info("Using default workspace path %s") % (workspace_path)
         ctx.workspace_path = workspace_path
 
+    # if workspace directory does not exist, create one
+    if not os.path.exists(ctx.workspace_path):
+        os.makedirs(ctx.workspace_path)
+
     # set bulletin catalog file
     ctx.bulletin_catalog = os.path.join(ctx.workspace_path, "bulletins.json")
 
